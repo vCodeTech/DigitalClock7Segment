@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Hẹn giờ</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        /* CSS để trang trí giao diện */
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f2f2f2;
+            margin: 0;
+            padding: 0;
+        }
+
+        #container {
+            width: 90%;
+            max-width: 800px;
+            margin: 20px auto;
+            background-color: #fff;
+            border-radius: 4px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 36px;
+            color: #4CAF50;
+            margin-top: 0;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 18px;
+            color: #555;
+        }
+
+        input[type="datetime-local"] {
+            width: 100%;
+            margin-bottom: 10px;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            margin-top: 10px;
+            padding: 10px 20px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        button:hover {
+            background-color: #3e8e41;
+        }
+
+        .error {
+            color: red;
+            margin-bottom: 10px;
+        }
+    </style>
+    <link rel="stylesheet" type="text/css" href="DateTimePicker.min.css" />
+    <script type="text/javascript" src="jquery-1.11.0.min.js"></script>
+    <script type="text/javascript" src="DateTimePicker.min.js"></script>
+</head>
+
+<body>
+    <div id="container">
+        <h1>Đồng Hồ Giải Đấu</h1>
+        <span id="status" style="font-weight: bold;"> Conecting... </span>
+        <form id="timerForm" method="post" style="display: none;">
+            <label for="iTimer">Hiểm Thị Đếm Ngược Tới Giờ Bắt Đầu</label>
+            <div>
+                <label><input type="checkbox" id="iTimer" name="iTimer" value="true">Bật</label>
+            </div>
+            <div id="startTimeContainer">
+                <label>Thời Gian Bắt Đầu:</label>
+                <input type="text" readonly id="startTime" data-field="datetime" required>
+            </div>
+            <label>Chế độ Giải Đấu:</label>
+            <div>
+                <label><input type="radio" name="modeRaceUp" value="true" checked>Digital Up</label>
+                <label><input type="radio" name="modeRaceUp" value="false">Digital Down</label>
+            </div>
+            <div id="endTimeContainer">
+                <label>Thời Gian Kết Thúc Giải</label>
+                <input type="text" readonly id="endTime" data-field="datetime">
+            </div>
+
+            <label>Chế độ Loop:</label>
+            <div>
+                <label><input type="radio" name="isLoop" value="true">Bật</label>
+                <label><input type="radio" name="isLoop" value="false" checked>Tắt</label>
+            </div>
+
+            <div id="ledContainer" style="display: none;">
+                <label>Mặt Hiển Thị Loop:</label>
+                <input type="radio" name="led" value="true" checked>LED 1</option>
+                <input type="radio" name="led" value="false">LED 2</option>
+            </div>
+
+            <button type="submit">Gửi</button>
+        </form>
+        <a href="./setting.html">Cấu Hình</a>
+        <div id="dtBox"></div>
+
+    </div>
+
+    <script>
+        $(document).ready(function () {
+            $("#dtBox").DateTimePicker(
+
+                {
+                    mode: "datetime",
+                    defaultDate: new Date(),
+                    dateSeparator: "/",
+                    dateTimeFormat: "MM/dd/yyyy HH:mm:ss",
+                    isPopup: false,
+                }
+            );
+        })
+
+        let limitTime = new Date();
+
+        //Javascript để xử lý sự kiện và gửi form sử dụng Ajax
+        const form = document.getElementById("timerForm");
+
+        const ledContainer = document.getElementById("ledContainer");
+        //ẩn hiện combobox LED tùy theo chế độ loop
+        const isLoopInputs = document.querySelectorAll("input[name=isLoop]");
+        isLoopInputs.forEach(input => {
+            input.addEventListener("change", () => {
+                const isLoop = document.querySelector("input[name=isLoop][value='true']").checked;
+                if (isLoop) {
+                    ledContainer.style.display = "block";
+                } else {
+                    ledContainer.style.display = "none";
+                }
+            });
+        });
+        const socket = new WebSocket('ws://' + location.hostname + ':81');
+        // const socket = new WebSocket('ws://192.168.2.1:81');
+
+        socket.onopen = function () //khi websocket được mở thì hàm này sẽ được thưc hiện
+        {
+            document.getElementById('status').innerHTML = 'Connected';
+            form.style.display = "block";
+            console.log('connected...')
+        };
+        socket.onmessage = function (evt) // sự kiện xảy ra khi client nhận dữ liệu từ server
+        {
+            alert(evt.data);
+        };
+        socket.onclose = function () { // hàm này sẽ được thực hiện khi đóng websocket
+            document.getElementById('status').innerHTML = 'Disconect';
+            console.log('Disconect...')
+            form.style.display = "none";
+        };
+
+        function setValue(element, date) {
+            const isoString = date.toISOString()
+            element.value = isoString.substring(0, isoString.indexOf("T") + 6);
+        }
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            const iTimer = document.querySelector("#iTimer").checked;
+            const startTime = document.getElementById("startTime").value;
+            const endTime = document.getElementById("endTime").value;
+            let modeRaceUp = "";
+            document.querySelectorAll('input[name="modeRaceUp"]').forEach((radioBox) => {
+                if (radioBox.checked && radioBox.value == "true") {
+                    modeRaceUp = true;
+                }
+                if (radioBox.checked && radioBox.value == "false") {
+                    modeRaceUp = false;
+                }
+            })
+            let loop = "";
+            document.querySelectorAll('input[name="isLoop"]').forEach((radioBox) => {
+                if (radioBox.checked && radioBox.value == "true") {
+                    loop = true;
+                }
+                if (radioBox.checked && radioBox.value == "false") {
+                    loop = false;
+                }
+            })
+
+            let led1 = "";
+
+            document.querySelectorAll('input[name="led"]').forEach((radioBox) => {
+                if (radioBox.checked && radioBox.value == "true") {
+                    led1 = true;
+                }
+                if (radioBox.checked && radioBox.value == "false") {
+                    led1 = false;
+                }
+
+            })
+            if (!modeRaceUp && endTime == "") {
+                console.log("loi");
+                alert("Chế Độ Digital Down bắt buộc nhập Thời GIan Kết Thúc Giải");
+            }
+            if (modeRaceUp && loop && endTime != "" && startTime != "") {
+                isNotStop = false;
+            } else if (modeRaceUp && !loop && endTime == "") {
+                isNotStop = true;
+            } else {
+                isNotStop = false;
+            }
+            let action = "setDataClock";
+            // String state = "countToStart";
+            const data = JSON.stringify({
+                action: action,
+                isTimer: Boolean(iTimer),
+                startTime: startTime,
+                endTime: endTime,
+                modeRaceUp: Boolean(modeRaceUp),
+                loopMode: Boolean(loop),
+                loopLed1: Boolean(led1),
+                isNotStop: Boolean(isNotStop),
+            });
+            console.log(data);
+            socket.send(data);
+        });
+
+    </script>
+</body>
+
+</html>
