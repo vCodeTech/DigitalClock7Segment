@@ -207,9 +207,9 @@ RtcDateTime convertTimeStringToRTC(char *dateTimeStr)
 void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 {
   if (type == WStype_DISCONNECTED)
-    webSocket.sendTXT(num, "Mất kết nối!");
+    showMessage("Mất kết nối!");
   if (type == WStype_CONNECTED)
-    webSocket.sendTXT(num, "Kết nối thành công!");
+    showMessage("Kết nối thành công!");
   if (type == WStype_BIN)
     Serial.printf("[WSc] get binary length: %u\n", length);
   if (type == WStype_TEXT)
@@ -242,7 +242,7 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
     }
     else if (doc["action"] == "setClock")
     {
-      if(state == "clock")
+      if (state == "clock")
         state = "countToStart";
       else
         state = "clock";
@@ -273,18 +273,35 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
         password = doc["password"];
         saveSettingWifi();
         webSocket.sendTXT(num, "Luu thong tin thanh cong! Server dang khoi dong lai");
-        ESP.restart();
       }
       else
       {
         // Nếu không đủ điều kiện thì gửi thông báo lỗi về client
         webSocket.sendTXT(num, "SSID va password khong hop le! Vui long kiem tra lai.");
       }
-    }else if (doc["action"] == "syncClock")
+    }
+    else if (doc["action"] == "syncClock")
     {
-      webSocket.sendTXT(num, "Đồng bộ thời gian thành công!");
+      RtcDateTime timeSync = convertUtcToRtcDateTime(doc["timeNow"].as<String>());
+      webSocket.sendTXT(num, "Đồng bộ thời gian thành công!"+doc["timeNow"].as<String>());
     }
   }
+}
+RtcDateTime convertUtcToRtcDateTime(String utcDateTimeStr) {
+  int year = utcDateTimeStr.substring(0, 4).toInt();
+  int month = utcDateTimeStr.substring(5, 7).toInt();
+  int day = utcDateTimeStr.substring(8, 10).toInt();
+  int hour = utcDateTimeStr.substring(11, 13).toInt();
+  int minute = utcDateTimeStr.substring(14, 16).toInt();
+  int second = utcDateTimeStr.substring(17, 19).toInt();
+
+  Rtc.SetIsWriteProtected(false);
+  RtcDateTime timeConvertUtm = RtcDateTime(year, month, day, hour, minute, second);
+  // Chuyen time qua mui gio +7
+  Rtc.SetDateTime(RtcDateTime(timeConvertUtm.TotalSeconds()+7*3600));
+  Rtc.SetIsWriteProtected(true);
+
+  return RtcDateTime(year, month, day, hour, minute, second);
 }
 // khoi tao dong ho
 void initRtc()
@@ -317,11 +334,11 @@ void initRtc()
     showMessage("RTC was not actively running, starting now");
     Rtc.SetIsRunning(true);
   }
-  RtcDateTime timeCheck = Rtc.GetDateTime();
-  if (timeCheck <= compiled)
-  {
-    Rtc.SetDateTime(compiled);
-  }
+  // RtcDateTime timeCheck = Rtc.GetDateTime();
+  // if (timeCheck <= compiled)
+  // {
+  //   Rtc.SetDateTime(compiled);
+  // }
 }
 // khoi tao FastLed
 void initFastLed()

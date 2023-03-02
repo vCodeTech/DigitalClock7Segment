@@ -75,7 +75,7 @@
         <div class="message" style="text-align: center; width: 100%;">
             <span id="status" style="font-weight: bold; color: red;"> Đang kết nối tới Đồng Hồ... </span>
         </div>
-        <form id="timerForm" method="post" style="display: none;">
+        <form id="timerForm" method="post" style="display: block; overflow: hidden;">
             <label for="iTimer">Đếm ngược đếm giờ bắt đầu chế độ đếm và hiển thị!</label>
             <div>
                 <label><input type="checkbox" id="iTimer" name="iTimer" value="true">Bật</label>
@@ -106,7 +106,7 @@
                 <input type="radio" name="led" value="false">LED 2</option>
             </div>
 
-            <button type="submit">Gửi</button>
+            <button type="submit" id="submit" style="display: none;">Gửi</button>
             <button type="button" id="btnSetting" style="background-color: red; float: right;">Cấu Hình</button>
             <div id="dtBox"></div>
         </form>
@@ -119,7 +119,7 @@
         document.getElementById('startTime').value = now.toISOString().slice(0, 16);
         document.getElementById("endTime").value = now.toISOString().slice(0, 16);
         //Javascript để xử lý sự kiện và gửi form sử dụng Ajax
-        const form = document.getElementById("timerForm");
+        const submit = document.getElementById("submit");
 
         const ledContainer = document.getElementById("ledContainer");
         //ẩn hiện combobox LED tùy theo chế độ loop
@@ -145,7 +145,7 @@
         const socketOpenListener = (event) => {
             document.getElementById('status').innerHTML = 'Kết nối thành công với Đồng Hồ.';
             document.getElementById('status').style.color = 'green';
-            form.style.display = "block";
+            submit.style.display = "block";
         };
 
         // Closed
@@ -154,10 +154,10 @@
                 document.getElementById('status').innerHTML = 'Đang kết nối với đồng hồ...';
                 document.getElementById('status').style.color = 'red';
                 console.log('Mất kết nối với đồng hồ...')
-                form.style.display = "none";
+                submit.style.display = "none";
             }
             mySocket = new WebSocket('ws://' + location.hostname + ':81');
-            // mySocket = new WebSocket('ws://192.168.2.1:81');
+            // mySocket = new WebSocket('ws://192.168.2.7:81');
             mySocket.addEventListener('open', socketOpenListener);
             mySocket.addEventListener('message', socketMessageListener);
             mySocket.addEventListener('close', socketCloseListener);
@@ -171,7 +171,7 @@
         document.getElementById("btnSetting").addEventListener('click', function () {
             window.location.href = "/setting";
         })
-        form.addEventListener('submit', function (event) {
+        submit.addEventListener('click', function (event) {
             event.preventDefault();
             const iTimer = document.querySelector("#iTimer").checked;
             const startTime = document.getElementById("startTime").value;
