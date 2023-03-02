@@ -66,23 +66,23 @@
             margin-bottom: 10px;
         }
     </style>
-    <link rel="stylesheet" type="text/css" href="DateTimePicker.min.css" />
     <script type="text/javascript" src="jquery-1.11.0.min.js"></script>
-    <script type="text/javascript" src="DateTimePicker.min.js"></script>
 </head>
 
 <body>
     <div id="container">
-        <h1>Đồng Hồ Giải Đấu</h1>
-        <span id="status" style="font-weight: bold;"> Conecting... </span>
+        <h1>TRUERACE DIGITAL CLOCK</h1>
+        <div class="message" style="text-align: center; width: 100%;">
+            <span id="status" style="font-weight: bold; color: red;"> Đang kết nối tới Đồng Hồ... </span>
+        </div>
         <form id="timerForm" method="post" style="display: none;">
-            <label for="iTimer">Hiểm Thị Đếm Ngược Tới Giờ Bắt Đầu</label>
+            <label for="iTimer">Đếm ngược đếm giờ bắt đầu chế độ đếm và hiển thị!</label>
             <div>
                 <label><input type="checkbox" id="iTimer" name="iTimer" value="true">Bật</label>
             </div>
-            <div id="startTimeContainer">
+            <div id="startTimeContainer" style="padding-right:20px;">
                 <label>Thời Gian Bắt Đầu:</label>
-                <input type="text" readonly id="startTime" data-field="datetime" required>
+                <input type="datetime-local" id="startTime" required step="1">
             </div>
             <label>Chế độ Giải Đấu:</label>
             <div>
@@ -91,7 +91,7 @@
             </div>
             <div id="endTimeContainer">
                 <label>Thời Gian Kết Thúc Giải</label>
-                <input type="text" readonly id="endTime" data-field="datetime">
+                <input type="datetime-local" id="endTime" step="1">
             </div>
 
             <label>Chế độ Loop:</label>
@@ -107,28 +107,17 @@
             </div>
 
             <button type="submit">Gửi</button>
+            <button type="button" id="btnSetting" style="background-color: red; float: right;">Cấu Hình</button>
+            <div id="dtBox"></div>
         </form>
-        <a href="./setting.html">Cấu Hình</a>
-        <div id="dtBox"></div>
-
     </div>
-
     <script>
-        $(document).ready(function () {
-            $("#dtBox").DateTimePicker(
-
-                {
-                    mode: "datetime",
-                    defaultDate: new Date(),
-                    dateSeparator: "/",
-                    dateTimeFormat: "MM/dd/yyyy HH:mm:ss",
-                    isPopup: false,
-                }
-            );
-        })
 
         let limitTime = new Date();
-
+        var now = new Date();
+        now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
+        document.getElementById('startTime').value = now.toISOString().slice(0, 16);
+        document.getElementById("endTime").value = now.toISOString().slice(0, 16);
         //Javascript để xử lý sự kiện và gửi form sử dụng Ajax
         const form = document.getElementById("timerForm");
 
@@ -146,34 +135,52 @@
             });
         });
         // const socket = new WebSocket('ws://' + location.hostname + ':81');
-        const socket = new WebSocket('ws://192.168.2.1:81');
+        // Socket Variable declaration
+        var mySocket;
+        const socketMessageListener = (event) => {
+            alert(event.data);
+        };
 
-        socket.onopen = function () //khi websocket được mở thì hàm này sẽ được thưc hiện
-        {
-            document.getElementById('status').innerHTML = 'Connected';
+        // Open
+        const socketOpenListener = (event) => {
+            document.getElementById('status').innerHTML = 'Kết nối thành công với Đồng Hồ.';
+            document.getElementById('status').style.color = 'green';
             form.style.display = "block";
-            console.log('connected...')
         };
-        socket.onmessage = function (evt) // sự kiện xảy ra khi client nhận dữ liệu từ server
-        {
-            alert(evt.data);
+
+        // Closed
+        const socketCloseListener = (event) => {
+            if (mySocket) {
+                document.getElementById('status').innerHTML = 'Đang kết nối với đồng hồ...';
+                document.getElementById('status').style.color = 'red';
+                console.log('Mất kết nối với đồng hồ...')
+                form.style.display = "none";
+            }
+            mySocket = new WebSocket('ws://' + location.hostname + ':81');
+            // mySocket = new WebSocket('ws://192.168.2.1:81');
+            mySocket.addEventListener('open', socketOpenListener);
+            mySocket.addEventListener('message', socketMessageListener);
+            mySocket.addEventListener('close', socketCloseListener);
         };
-        socket.onclose = function () { // hàm này sẽ được thực hiện khi đóng websocket
-            document.getElementById('status').innerHTML = 'Disconect';
-            console.log('Disconect...')
-            form.style.display = "none";
-        };
+        socketCloseListener();
 
         function setValue(element, date) {
             const isoString = date.toISOString()
             element.value = isoString.substring(0, isoString.indexOf("T") + 6);
         }
+        document.getElementById("btnSetting").addEventListener('click', function () {
+            window.location.href = "/setting";
+        })
         form.addEventListener('submit', function (event) {
             event.preventDefault();
             const iTimer = document.querySelector("#iTimer").checked;
             const startTime = document.getElementById("startTime").value;
             const endTime = document.getElementById("endTime").value;
-            let modeRaceUp = "";
+            let modeRaceUp = true;
+            let notError = true;
+            if (!confirm("Bạn có muốn tạo giải với các thông số như này không?")) {
+                notError = false;
+            }
             document.querySelectorAll('input[name="modeRaceUp"]').forEach((radioBox) => {
                 if (radioBox.checked && radioBox.value == "true") {
                     modeRaceUp = true;
@@ -182,7 +189,7 @@
                     modeRaceUp = false;
                 }
             })
-            let loop = "";
+            let loop = true;
             document.querySelectorAll('input[name="isLoop"]').forEach((radioBox) => {
                 if (radioBox.checked && radioBox.value == "true") {
                     loop = true;
@@ -192,7 +199,7 @@
                 }
             })
 
-            let led1 = "";
+            let led1 = true;
 
             document.querySelectorAll('input[name="led"]').forEach((radioBox) => {
                 if (radioBox.checked && radioBox.value == "true") {
@@ -204,8 +211,12 @@
 
             })
             if (!modeRaceUp && endTime == "") {
-                console.log("loi");
                 alert("Chế Độ Digital Down bắt buộc nhập Thời GIan Kết Thúc Giải");
+                notError = false;
+            }
+            if (startTime == "") {
+                alert("Chế Độ Digital Down bắt buộc nhập Thời GIan Kết Thúc Giải");
+                notError = false;
             }
             if (modeRaceUp && loop && endTime != "" && startTime != "") {
                 isNotStop = false;
@@ -227,7 +238,8 @@
                 isNotStop: Boolean(isNotStop),
             });
             console.log(data);
-            socket.send(data);
+            if (notError)
+                mySocket.send(data);
         });
 
     </script>
