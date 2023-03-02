@@ -2,7 +2,7 @@
 <html>
 
 <head>
-    <title>Hẹn giờ</title>
+    <title>Cấu Hình Thông Số</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
@@ -71,9 +71,6 @@
 <body>
     <div id="container" style="text-align: center;">
         <h1>Cấu Hình Đồng Hồ</h1>
-        <div class="message" style="text-align: center; width: 100%;">
-            <span id="status" style="font-weight: bold; color: red;"> Đang kết nối tới Đồng Hồ... </span>
-        </div>
         <br />
         <form id="settingWifi" method="post" style="display: block;" onsubmit="return false;">
             <label for="ssid">Tên Access Point Mới</label>
@@ -82,20 +79,30 @@
                         placeholder="Tối thiểu 8 kí tự không dấu không cách"></label>
             </div>
             <label for="ssid">Mật Khẩu Mới</label>
+
             <div>
                 <label><input type="password" id="password" name="ssid"
                         placeholder="tối thiểu 8 kí tự không dấu không cách"></label>
             </div>
-            <div id="buttonSetting" style="display: none;">
-                <button type="button" id="submit">Lưu Wifi Mới</button>
+            <div id="buttonSetting">
                 <br />
-                <button type="button" id="stop" style="background-color:red;">KẾT THÚC GIẢI</button>
-                <button type="button" id="setClockMode" style="background-color:red;">HIỂN THỊ THỜI GIAN THỰC</button>
-                <button type="button" id="syncClock" style="background-color:red;">ĐỒNG BỘ THỜI GIAN VỚI ĐIỆN
+                <div class="message" style="text-align: center; width: 100%;">
+                    <span id="status" style="font-weight: bold; color: red;"></span>
+                </div>
+                <button type="button" id="submit" disabled style="background-color: gray;">Lưu Wifi Mới</button>
+                <br />
+                <button type="button" id="stop" style="background-color:gray;" disabled>KẾT THÚC GIẢI</button>
+                <button type="button" id="setClockMode" style="background-color:gray;" disabled>HIỂN THỊ THỜI GIAN
+                    THỰC</button>
+                <button type="button" id="syncClock" style="background-color:gray;" disabled>ĐỒNG BỘ THỜI GIAN VỚI ĐIỆN
                     THOẠI</button>
                 <br />
-                <label>Hiển thị thời gian thực giúp check thời gian thực tế trên đồng hồ, không ảnh hưởng tới mode đang
-                    chạy</label>
+                <br />
+                <label>*Lưu WIFI không ảnh hưởng tới giải đang chạy</label>
+                <label>*Hiển thị thời gian thực không ảnh hưởng giải đang chạy</label>
+                <label>*Nhấn tiếp 1 lần nữa để quay lại hiển thị giải đang chạy</label>
+                <label>*Đồng bộ hoá thời gian với ĐT, không ảnh hưởng giải đang chạy!</label>
+
             </div>
         </form>
     </div>
@@ -114,13 +121,35 @@
         var mySocket;
         const socketMessageListener = (event) => {
             alert(event.data);
+            btnSubmit.style.background = "green";
+            btnSubmit.disabled = false;
+
+            btnStop.style.background = "red";
+            btnStop.disabled = false;
+
+            btnSetClockMode.style.background = "red";
+            btnSetClockMode.disabled = false;
+
+            btnSyncClock.style.background = "red";
+            btnSyncClock.disabled = false;
+
         };
 
         // Open
         const socketOpenListener = (event) => {
             document.getElementById('status').innerHTML = 'Kết nối thành công với Đồng Hồ.';
             document.getElementById('status').style.color = 'green';
-            buttonSetting.style.display = "block";
+            btnSubmit.style.background = "green";
+            btnSubmit.disabled = false;
+
+            btnStop.style.background = "red";
+            btnStop.disabled = false;
+
+            btnSetClockMode.style.background = "red";
+            btnSetClockMode.disabled = false;
+
+            btnSyncClock.style.background = "red";
+            btnSyncClock.disabled = false;
         };
 
         // Closed
@@ -129,13 +158,25 @@
                 document.getElementById('status').innerHTML = 'Đang kết nối với đồng hồ...';
                 document.getElementById('status').style.color = 'red';
                 console.log('Mất kết nối với đồng hồ...')
-                buttonSetting.style.display = "none";
             }
             mySocket = new WebSocket('ws://' + location.hostname + ':81');
             // mySocket = new WebSocket('ws://192.168.2.7:81');
             mySocket.addEventListener('open', socketOpenListener);
             mySocket.addEventListener('message', socketMessageListener);
             mySocket.addEventListener('close', socketCloseListener);
+
+            btnSubmit.style.background = "gray";
+            btnSubmit.disabled = true;
+
+            btnStop.style.background = "gray";
+            btnStop.disabled = true;
+
+            btnSetClockMode.style.background = "gray";
+            btnSetClockMode.disabled = true;
+
+            btnSyncClock.style.background = "gray";
+            btnSyncClock.disabled = true;
+
         };
         socketCloseListener();
 
@@ -145,7 +186,19 @@
         }
 
         btnSubmit.addEventListener('click', function (event) {
-            if (confirm("Bạn có chắn chắn  muốn lưu wifi mới không? Đông hồ sẽ khởi động lại để nhận WIFI mới!")) {
+            if (confirm("Bạn có chắn chắn  muốn lưu wifi mới không? Thông số sẽ được sử dụng cho lần khởi động lại tiếp theo!")) {
+                btnSubmit.style.background = "gray";
+                btnSubmit.disabled = true;
+
+                btnStop.style.background = "gray";
+                btnStop.disabled = true;
+
+                btnSetClockMode.style.background = "gray";
+                btnSetClockMode.disabled = true;
+
+                btnSyncClock.style.background = "gray";
+                btnSyncClock.disabled = true;
+
                 event.preventDefault();
                 const ssid = document.getElementById("ssid").value;
                 const password = document.getElementById("password").value;
@@ -163,6 +216,18 @@
         });
         btnStop.addEventListener('click', function (event) {
             if (confirm("Bạn có chắn chắn muốn đồng hồ dừng lại tại thời điểm này?")) {
+                btnSubmit.style.background = "gray";
+                btnSubmit.disabled = true;
+
+                btnStop.style.background = "gray";
+                btnStop.disabled = true;
+
+                btnSetClockMode.style.background = "gray";
+                btnSetClockMode.disabled = true;
+
+                btnSyncClock.style.background = "gray";
+                btnSyncClock.disabled = true;
+
                 let action = "stop";
                 // String state = "countToStart";
                 const data = JSON.stringify({
@@ -174,6 +239,18 @@
         })
         btnSetClockMode.addEventListener('click', function (event) {
             if (confirm("Bạn có chắn chắn muốn chuyển chế độ qua mode Clock?")) {
+                btnSubmit.style.background = "gray";
+                btnSubmit.disabled = true;
+
+                btnStop.style.background = "gray";
+                btnStop.disabled = true;
+
+                btnSetClockMode.style.background = "gray";
+                btnSetClockMode.disabled = true;
+
+                btnSyncClock.style.background = "gray";
+                btnSyncClock.disabled = true;
+
                 let action = "setClock";
                 // String state = "countToStart";
                 const data = JSON.stringify({
@@ -186,6 +263,18 @@
         })
         btnSyncClock.addEventListener('click', function (event) {
             if (confirm("Bạn có chắn chắn muốn chuyển chế độ qua mode Clock?")) {
+                btnSubmit.style.background = "gray";
+                btnSubmit.disabled = true;
+
+                btnStop.style.background = "gray";
+                btnStop.disabled = true;
+
+                btnSetClockMode.style.background = "gray";
+                btnSetClockMode.disabled = true;
+
+                btnSyncClock.style.background = "gray";
+                btnSyncClock.disabled = true;
+
                 let action = "syncClock";
                 // String state = "countToStart";
                 //2023-03-02T07:20:36.000Z
