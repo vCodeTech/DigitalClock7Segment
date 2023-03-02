@@ -38,8 +38,7 @@ byte digits[11] = {
 // DS1302 RST/CE --> 27
 // DS1302 VCC --> 3.3v - 5v
 // DS1302 GND --> GND
-// ThreeWire myWire(26, 27, 25);  // IO, SCLK, CE
-ThreeWire myWire(26, 25, 27); // IO, SCLK, CE
+ThreeWire myWire(26, 25, 27); // IO - DAT , SCLK - CLK , CE - RST
 RtcDS1302<ThreeWire> Rtc(myWire);
 
 const char *ssid = "MyESP32AP";
@@ -157,11 +156,20 @@ void loadSettingsFromSPIFFS()
     char charArrEndTime[endTime.length() + 1];
     endTime.toCharArray(charArrEndTime, endTime.length() + 1);
     showMessage(startTime);
-    timeStart = convertTimeStringToRTC(charArrStartTime);
-    showMessage((String)timeStart.TotalSeconds());
     showMessage(endTime);
-    timeEnd = convertTimeStringToRTC(charArrEndTime);
-    showMessage((String)timeEnd.TotalSeconds());
+    showMessage("END CHECKTIME");
+    if (startTime != "")
+    {
+      timeStart = convertTimeStringToRTC(charArrStartTime);
+    }
+    if (endTime != "")
+    {
+      timeEnd = convertTimeStringToRTC(charArrEndTime);
+    }
+    else
+    {
+      isNotStop = true;
+    }
 
     // convectEndTimeStringToRTC(charArrEndTime);
     // timeStart = RtcDateTime(2023, 3, 1, 18, 05, 00);
@@ -172,40 +180,36 @@ void loadSettingsFromSPIFFS()
 // chuyen doi chuoi dinh dang "03/21/1991 12:40:30" sang RtcDateTime
 RtcDateTime convertTimeStringToRTC(char *dateTimeStr)
 {
-
-  char *dateStr = strtok(dateTimeStr, " ");
-  char *timeStr = strtok(NULL, " ");
+  // 2023-03-01T21:58
+  // 2023-03-01T21:58:00
+  char *dateStr = strtok(dateTimeStr, "T");
+  char *timeStr = strtok(NULL, "T");
 
   // Tách ngày tháng năm từ chuỗi ngày
-  int month = atoi(strtok(dateStr, "/"));
-  int day = atoi(strtok(NULL, "/"));
-  int year = atoi(strtok(NULL, "/"));
+  int year = atoi(strtok(dateStr, "-"));
+  int month = atoi(strtok(NULL, "-"));
+  int day = atoi(strtok(NULL, "-"));
 
   // Tách giờ phút giây từ chuỗi giờ
   int hour = atoi(strtok(timeStr, ":"));
   int minute = atoi(strtok(NULL, ":"));
-  int second = atoi(strtok(NULL, ":"));
-  showMessage((String)day);
-  showMessage("/");
-  showMessage((String)month);
-  showMessage("/");
-  showMessage((String)year);
-  showMessage("/");
-  showMessage((String)hour);
-  showMessage("/");
-  showMessage((String)minute);
-  showMessage("/");
-  showMessage((String)second);
-  showMessage("/");
+  int second = 0;
+  // Kiểm tra xem có tồn tại giây trong chuỗi giờ hay không
+  char *secondStr = strtok(NULL, ":");
+  if (secondStr != NULL)
+  {
+    second = atoi(secondStr);
+  }
+
   return RtcDateTime(year, month, day, hour, minute, second);
 }
 
 void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t length)
 {
   if (type == WStype_DISCONNECTED)
-    Serial.printf("[WSc] Disconnected!\n");
+    webSocket.sendTXT(num, "Mất kết nối!");
   if (type == WStype_CONNECTED)
-    Serial.printf("[WSc] Connected to url: %s\n", payload);
+    webSocket.sendTXT(num, "Kết nối thành công!");
   if (type == WStype_BIN)
     Serial.printf("[WSc] get binary length: %u\n", length);
   if (type == WStype_TEXT)
@@ -216,6 +220,7 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
 
     if (error)
     {
+      webSocket.sendTXT(num, "Dữ liệu gửi lên sai cấu trúc! Liên hệ ADMIN");
       Serial.println("deserializeJson() failed");
       return;
     }
@@ -231,39 +236,53 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
       loopMode = doc["loopMode"];
       loopLed1 = doc["loopLed1"];
       isNotStop = doc["isNotStop"];
-      webSocket.sendTXT(num, "I Got Your Messager");
+      webSocket.sendTXT(num, "Khởi tạo giải đấu thành công!");
       saveSettingsToSPIFFS();
       loadSettingsFromSPIFFS();
     }
     else if (doc["action"] == "setClock")
     {
+      if(state == "clock")
+        state = "countToStart";
+      else
+        state = "clock";
       // chuyen vê clock mode khong xoa du lieu
-      webSocket.sendTXT(num, "Chuyen ve Mode CLock thanh cong! Giai dau khong bi gian doan!");
+      webSocket.sendTXT(num, "Chuyển về Clock, gửi tiếp 1 lệnh để quay lại. Giải vẫn chạy!");
     }
     else if (doc["action"] == "clearClock")
     {
+      state = "clock";
+      isTimer = true;
+      startTime = "2023-03-01T21:58:00";
+      endTime = "2023-03-01T21:58:00";
+      modeRaceUp = true;
+      loopMode = true;
+      loopLed1 = false;
+      isNotStop = true;
+      saveSettingsToSPIFFS();
+      loadSettingsFromSPIFFS();
       // bat tín hiệu xoá toàn bộ seting chuyên về clock mode
-      webSocket.sendTXT(num, "Xoa du lieu Giai Dau thanh cong! Chuyen ve Mode Clock");
-    }
-    else if (doc["action"] == "finishJob")
-    {
-      // bắt tín hiệu báo dừng giải đấu. Lưu toàn bộ dữ liệu hiện tại và stop hiển thị
-      webSocket.sendTXT(num, "Giai dau ket thuc!");
-    }
-    else if (doc["action"] == "stop")
-    {
-      // bắt tín hiệu báo dừng giải đấu. Lưu toàn bộ dữ liệu hiện tại và stop hiển thị
-      webSocket.sendTXT(num, "Giai dau ket thuc!");
+      webSocket.sendTXT(num, "Xoá dữ liệu giải đấu thành công! Quay về mode Clock!");
     }
     else if (doc["action"] == "configWifi")
     {
-      // bắt tín hiệu báo dừng giải đấu. Lưu toàn bộ dữ liệu hiện tại và stop hiển thị
-      ssid = doc["ssid"];
-      password = doc["password"];
-      Serial.println(ssid);
-      Serial.println(password);
-      saveSettingWifi();
-      webSocket.sendTXT(num, "Luu thong tin thanh cong! Server dang khoi dong lai");
+      // Kiểm tra xem ssid và password có đủ điều kiện đặt tên cho một AP hay không
+      if (strlen(doc["ssid"]) >= 8 && strlen(doc["ssid"]) <= 32 && strlen(doc["password"]) >= 8 && strlen(doc["password"]) <= 32)
+      {
+        ssid = doc["ssid"];
+        password = doc["password"];
+        saveSettingWifi();
+        webSocket.sendTXT(num, "Luu thong tin thanh cong! Server dang khoi dong lai");
+        ESP.restart();
+      }
+      else
+      {
+        // Nếu không đủ điều kiện thì gửi thông báo lỗi về client
+        webSocket.sendTXT(num, "SSID va password khong hop le! Vui long kiem tra lai.");
+      }
+    }else if (doc["action"] == "syncClock")
+    {
+      webSocket.sendTXT(num, "Đồng bộ thời gian thành công!");
     }
   }
 }
@@ -273,6 +292,14 @@ void initRtc()
   Rtc.Begin();
   RtcDateTime compiled = RtcDateTime(__DATE__, __TIME__);
 
+  showMessage("Compiled");
+  showMessage((String)compiled.Hour());
+  showMessage((String)compiled.Minute());
+  showMessage((String)compiled.Second());
+  showMessage((String)compiled.Day());
+  showMessage((String)compiled.Month());
+  showMessage((String)compiled.Year());
+  showMessage("EndCompiled");
   if (!Rtc.IsDateTimeValid())
   {
     showMessage("RTC lost confidence in the DateTime!");
@@ -289,6 +316,11 @@ void initRtc()
   {
     showMessage("RTC was not actively running, starting now");
     Rtc.SetIsRunning(true);
+  }
+  RtcDateTime timeCheck = Rtc.GetDateTime();
+  if (timeCheck <= compiled)
+  {
+    Rtc.SetDateTime(compiled);
   }
 }
 // khoi tao FastLed
@@ -311,14 +343,17 @@ void setup()
   loadSettingWifi();
   loadSettingsFromSPIFFS();
   server.on("/", HTTP_GET, [](AsyncWebServerRequest *request)
-            { 
-              Serial.print("Get ON");
-              request->send(SPIFFS, "/index.html", "text/html"); });
+            { request->send(SPIFFS, "/index.html", "text/html"); });
   server.on("/setting", HTTP_GET, [](AsyncWebServerRequest *request)
-            { 
-              Serial.print("Get ON");
-              request->send(SPIFFS, "/setting.html", "text/html"); });
-
+            { request->send(SPIFFS, "/setting.html", "text/html"); });
+  server.on("/DateTimePicker_iOS_fix.js", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/DateTimePicker_iOS_fix.js", "text/javascript"); });
+  server.on("/DateTimePicker.min.js", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/DateTimePicker.min.js", "text/javascript"); });
+  server.on("/jquery-1.11.0.min.js", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/jquery-1.11.0.min.js", "text/javascript"); });
+  server.on("/DateTimePicker.min.css", HTTP_GET, [](AsyncWebServerRequest *request)
+            { request->send(SPIFFS, "/DateTimePicker.min.css", "text/css"); });
   server.begin();
   webSocket.begin();
   webSocket.onEvent(handleWebSocketEvent);
@@ -389,8 +424,19 @@ void loop()
 // xu Ly Logic Dong ho
 void xuLyLogicDongHo()
 {
+  if (timeStart >= timeEnd && modeRaceUp && !isNotStop)
+  {
+    state == "error";
+  }
   if (state == "sleep")
   {
+    return;
+  }
+  if (state == "error")
+  {
+    showTimeToClock(2160001, 1);
+    showTimeToClock(2160001, 2);
+    showMessage("Chương Trình Bị lỗi!");
     return;
   }
   // neu state la clock chuyen dong ho hien thi thoi gian thuc
@@ -403,7 +449,7 @@ void xuLyLogicDongHo()
   }
   // chi cho phep resume khi
   // ModeRaceUp, no Loop, NotStop
-  if (state == "resume" && isNotStop && modeRaceUp && !loopMode)
+  if (state == "resume" && isNotStop && modeRaceUp && !loopMode && timeNow > timePause)
   {
     timeStart = RtcDateTime(calculateTimeDiff(timePause, timeNow));
     state = "start";
@@ -416,8 +462,8 @@ void xuLyLogicDongHo()
     state = "sleep";
     return;
   }
-  // Che do dem len khong dung khi nhan bat dau State == start va isNotStop == true va modeRaceUp true va not loopMode
-  if (state == "start" && isNotStop && modeRaceUp && !loopMode)
+  // // Che do dem len khong dung khi nhan bat dau State == start va isNotStop == true va modeRaceUp true va not loopMo de
+  if (state == "start" && isNotStop && modeRaceUp && !loopMode && timeNow >= timeStart)
   {
     showMessage("start && isNotStop && modeRaceUp && !loopMode");
     uint32_t timeDiff = calculateTimeDiff(timeNow, timeStart);
@@ -506,6 +552,7 @@ void showMessage(String message)
 void showClockWhenLoopModeNotActiveAndUp()
 {
   showMessage("Not Lop Mode Race Up");
+
   // Che do dem Tu timeStart toi timeEnd
   if (state == "start" && timeNow >= timeStart && timeNow <= timeEnd)
   {
@@ -573,7 +620,7 @@ void showClockWhenLoopModeNotActiveAndDown()
 // Hien thi thoi gian tren dong ho khi che do loop dc kich hoat va Mode UP
 void showClockWhenLoopModeActiveAndUp()
 {
-    if (timeNow < timeStart)
+  if (timeNow < timeStart)
   {
     if (loopLed1)
     {
@@ -587,8 +634,18 @@ void showClockWhenLoopModeActiveAndUp()
     }
     return;
   }
+  if (timeNow < timeStart || timeEnd < timeStart)
+  {
+    state == "error";
+    return;
+  }
   uint32_t timeDiffAB = calculateTimeDiff(timeEnd, timeStart);
   uint32_t timeDiffNow = calculateTimeDiff(timeNow, timeStart);
+  if (timeDiffAB == 0)
+  {
+    state = "error";
+    return;
+  }
   int loopCount = timeDiffNow / timeDiffAB;
   if (loopCount > 99)
   {
@@ -638,8 +695,19 @@ void showClockWhenLoopModeActiveAndDown()
     }
     return;
   }
+  if (timeNow < timeStart || timeEnd < timeStart)
+  {
+    state == "error";
+    return;
+  }
+
   uint32_t timeDiffAB = calculateTimeDiff(timeEnd, timeStart);
   uint32_t timeDiffNow = calculateTimeDiff(timeNow, timeStart);
+  if (timeDiffAB == 0)
+  {
+    state = "error";
+    return;
+  }
   int loopCount = timeDiffNow / timeDiffAB;
   if (loopCount > 99)
   {
@@ -672,10 +740,10 @@ void showClockWhenLoopModeActiveAndDown()
     ShowLoopCount(loopCount, 2);
   }
 }
-// Tinh toan chenh lech giua 2 khoang thoi gian. Tra ve don vi giay
+// Tinh toan chenh lech giua 2 khoang thoi gian. Tra ve don vi giay nếu là số âm time1 nhỏ hơn time2
 uint32_t calculateTimeDiff(RtcDateTime &time1, RtcDateTime &time2)
 {
-  uint32_t secondsDiff = labs(time1.TotalSeconds() - time2.TotalSeconds());
+  uint32_t secondsDiff = time1.TotalSeconds() - time2.TotalSeconds();
   return secondsDiff;
 }
 // Chuyen dinh dang giay thanh HH:MM:SS ( Dung de Printr ra SerialMonitor)
