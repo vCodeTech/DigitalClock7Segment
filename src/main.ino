@@ -8,6 +8,38 @@
 #include <SPIFFS.h>
 #include <FS.h>
 
+// KHOI TAO THONG SO THU VIEN
+// CONNECTIONS:
+// DS1302 CLK/SCLK --> 25
+// DS1302 DAT/IO --> 26
+// DS1302 RST/CE --> 27
+// DS1302 VCC --> 3.3v - 5v
+// DS1302 GND --> GND
+ThreeWire myWire(26, 25, 27); // IO - DAT , SCLK - CLK , CE - RST
+RtcDS1302<ThreeWire> Rtc(myWire);
+AsyncWebServer server(80);
+WebSocketsServer webSocket = WebSocketsServer(81);
+
+// Khoi tao bien toan cuc
+const char *ssid = "MyESP32AP";
+const char *password = "123456789";
+boolean isDebug = false;
+boolean isTimer;
+boolean modeRaceUp;
+boolean loopMode;
+boolean isNotStop;
+String state = "countToStart";
+boolean loopLed1;
+String startTime = "";
+String endTime = "";
+
+RtcDateTime timeStart;
+RtcDateTime timeEnd;
+RtcDateTime timeNow;
+RtcDateTime timePause;
+
+// khao bao thong so led
+
 const int LED_PIN = 4;
 const int LED_PIN2 = 17;
 const int NUM_LEDS = 612;       // Khai bao tong so led co tren 1 mat
@@ -32,34 +64,8 @@ byte digits[11] = {
     0b1101111, // So 9
     0b0000000  // tat led
 };
-// CONNECTIONS:
-// DS1302 CLK/SCLK --> 25
-// DS1302 DAT/IO --> 26
-// DS1302 RST/CE --> 27
-// DS1302 VCC --> 3.3v - 5v
-// DS1302 GND --> GND
-ThreeWire myWire(26, 25, 27); // IO - DAT , SCLK - CLK , CE - RST
-RtcDS1302<ThreeWire> Rtc(myWire);
+// end khai bao thong so led
 
-const char *ssid = "MyESP32AP";
-const char *password = "123456789";
-boolean isDebug = false;
-boolean isTimer;
-boolean modeRaceUp;
-boolean loopMode;
-boolean isNotStop;
-String state = "countToStart";
-boolean loopLed1;
-String startTime = "";
-String endTime = "";
-
-RtcDateTime timeStart;
-RtcDateTime timeEnd;
-RtcDateTime timeNow;
-RtcDateTime timePause;
-
-AsyncWebServer server(80);
-WebSocketsServer webSocket = WebSocketsServer(81);
 // Hàm ghi dữ liệu vào SPIFFS
 void saveSettingWifi()
 {
