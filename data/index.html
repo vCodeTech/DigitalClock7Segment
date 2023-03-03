@@ -161,8 +161,8 @@
         var mySocket;
         const socketMessageListener = (event) => {
             alert(event.data);
-            submit.style.background = "gray";
-            submit.disabled = true;
+            submit.style.background = "green";
+            submit.disabled = false;
         };
 
         // Open
@@ -182,8 +182,8 @@
                 submit.style.background = "gray";
                 submit.disabled = true;
             }
-            // mySocket = new WebSocket('ws://' + location.hostname + ':81');
-            mySocket = new WebSocket('ws://192.168.2.7:81');
+            mySocket = new WebSocket('ws://' + location.hostname + ':81');
+            // mySocket = new WebSocket('ws://192.168.2.7:81');
             mySocket.addEventListener('open', socketOpenListener);
             mySocket.addEventListener('message', socketMessageListener);
             mySocket.addEventListener('close', socketCloseListener);
