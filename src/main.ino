@@ -20,7 +20,7 @@ const int interruptPin = 19;
 // Khoi tao bien toan cuc
 const char *ssid = "MyESP32AP";
 const char *password = "123456789";
-boolean isDebug = false;
+boolean isDebug = true;
 boolean isTimer;
 boolean modeRaceUp;
 boolean loopMode;
@@ -36,10 +36,10 @@ RtcDateTime timeNow;
 RtcDateTime timePause;
 
 // 1.1.3 - Cap nhat tinh nang check ban cap nhat qua Internet
-String version = "v@1.1.5";
+String version = "v@1.1.9";
 int ver_1 = 1;
 int ver_2 = 1;
-int ver_3 = 5;
+int ver_3 = 9;
 boolean doUpdate = false;
 // khao bao thong so led
 
@@ -141,6 +141,7 @@ void loadSettingWifi()
   // Đọc dữ liệu từ file và gán cho các biến toàn cục
   DynamicJsonDocument json(1024);
   DeserializationError error = deserializeJson(json, file);
+
   if (error)
   {
     Serial.println("Khong tim dc thong tin WIFI. Khoi dong wifi mac dinh");
@@ -341,8 +342,18 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
     }
     else if (doc["action"] == "checkUpdate")
     {
-      doUpdate = true;
-      webSocket.sendTXT(num, "Đang kiểm tra cập nhật. Nếu có bản cập nhật mới sẽ tự động restart!");
+      if (!doUpdate)
+      {
+        if (WiFi.status() != WL_CONNECTED)
+          initConnectWifiTest();
+
+        doUpdate = true;
+        webSocket.sendTXT(num, "Đang kiểm tra cập nhật. Nếu có bản cập nhật mới sẽ tự động restart!");
+      }
+      else
+      {
+        webSocket.sendTXT(num, "Đang đợi cập nhật vui lòng chờ trong giây lát!");
+      }
     }
   }
 }
@@ -382,6 +393,7 @@ void initRtc()
       //    2) the battery on the device is low or even missing
 
       Serial.println("RTC lost confidence in the DateTime!");
+      showErrorOnClock(0, 1, 0);
       // following line sets the RTC to the date & time this sketch was compiled
       // it will also reset the valid flag internally unless the Rtc device is
       // having an issue
@@ -395,6 +407,7 @@ void initRtc()
     if (!wasError("setup GetIsRunning"))
     {
       Serial.println("RTC was not actively running, starting now");
+      showErrorOnClock(0, 1, 1);
       Rtc.SetIsRunning(true);
     }
   }
@@ -405,15 +418,18 @@ void initRtc()
     if (now < compiled)
     {
       Serial.println("RTC is older than compile time, updating DateTime");
+      showErrorOnClock(0, 1, 2);
       Rtc.SetDateTime(compiled);
     }
     else if (now > compiled)
     {
       Serial.println("RTC is newer than compile time, this is expected");
+      showErrorOnClock(0, 1, 3);
     }
     else if (now == compiled)
     {
       Serial.println("RTC is the same as compile time, while not expected all is still fine");
+      showErrorOnClock(0, 1, 4);
     }
   }
 
@@ -427,10 +443,7 @@ void initFastLed()
 {
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(matLed1, NUM_LEDS);  // Khoi tao control cho mat 1
   FastLED.addLeds<WS2812B, LED_PIN2, GRB>(matLed2, NUM_LEDS); // khoi tao control cho mat 2
-  FastLED.clear();
-  showErrorOnClock(ver_1, ver_2, ver_3); // Hien thong tin phien ban
-  delay(1000);
-  FastLED.clear();
+  showErrorOnClock(ver_1, ver_2, ver_3);                      // Hien thong tin phien ban
 }
 void setup()
 {
@@ -441,6 +454,7 @@ void setup()
   if (!SPIFFS.begin(true))
   {
     Serial.println("An error occurred while mounting SPIFFS");
+    showErrorOnClock(0, 2, 0);
     return;
   }
   loadSettingWifi();
@@ -471,8 +485,8 @@ void initConnectWifiTest()
 {
 
   // Connect to the new Wi-Fi network
-  WiFi.begin("UPDATECLOCK", "123456789");
-  WiFi.hostname("Dong Van Ho");
+  WiFi.begin("Quang Cao Nguyen Ho.Com", "908165185");
+  WiFi.setHostname("DongHoVNG");
   Serial.printf("Connecting to %s...\n", ssid);
 
   // Wait for the connection to complete
@@ -489,11 +503,13 @@ void initConnectWifiTest()
   if (WiFi.status() != WL_CONNECTED)
   {
     Serial.println("Connection failed");
+    showErrorOnClock(0, 0, 2); // WIFI CONNECT KHONG THANH CONG
     return;
   }
   // Print the new network details
   Serial.println("Connected to new network");
   Serial.println(WiFi.localIP());
+  showErrorOnClock(0, 0, 3); // WIFI CONNECT THANH CONG
 }
 void ota()
 {
@@ -531,6 +547,8 @@ void loop()
 // xu Ly Logic Dong ho
 void showErrorOnClock(int code1, int code2, int code3)
 {
+  FastLED.clear();
+  FastLED.show();
   ShowDigit(code1, 2, 0, 1);
   ShowDigit(code2, 4, 12, 1);
   ShowDigit(code3, 6, 24, 1);
@@ -538,6 +556,9 @@ void showErrorOnClock(int code1, int code2, int code3)
   ShowDigit(code1, 2, 0, 2);
   ShowDigit(code2, 4, 12, 2);
   ShowDigit(code3, 6, 24, 2);
+  delay(1000);
+  FastLED.clear();
+  FastLED.show();
 }
 void xuLyLogicDongHo()
 {
@@ -551,7 +572,7 @@ void xuLyLogicDongHo()
   }
   if (state == "error")
   {
-    showErrorOnClock(0,0,1); // Chuong trinh dong ho co loi
+    showErrorOnClock(0, 3, 0); // Chuong trinh dong ho co loi
     showMessage("Chương Trình Bị lỗi!");
     return;
   }
@@ -599,7 +620,7 @@ void xuLyLogicDongHo()
   // Neu co hen gio va state dang o trang thai dem toi hen gio thi hien thi thoi gian dem nguoc toi luc bat dau
   if (isTimer && state == "countToStart")
   {
-    if (timeNow <= timeStart)
+    if (timeNow < timeStart)
     {
       showMessage("isTimer && state == countToStart && timeNow < timeStart");
       uint32_t timeDiff = calculateTimeDiff(timeStart, timeNow);
@@ -613,7 +634,13 @@ void xuLyLogicDongHo()
     }
     else
     {
-      showMessage("Xong dem < timeStart");
+      showMessage("isTimer && state == countToStart && timeNow < timeStart");
+      uint32_t timeDiff = calculateTimeDiff(timeStart, timeNow);
+      uint8_t currentSecond = timeNow.Second();
+      showMessage("Dem Toi Start : ");
+      // Serial.println(timeDiff);
+      showTimeToClock(timeDiff, 1);
+      showTimeToClock(timeDiff, 2);
       // neu het thoi gian dem nguoc, chuyen che do qua start
       state = "start";
       return;
@@ -722,7 +749,7 @@ void showClockWhenLoopModeNotActiveAndDown()
   {
     state = "continue";
   }
-  if (state == "continue" && timeNow >= timeEnd)
+  if (state == "continue" && timeNow > timeEnd)
   {
     // La mode Down va khong Loop nen hien thi so 00:00:00
     showTimeToClock(0, 1);
@@ -752,6 +779,7 @@ void showClockWhenLoopModeActiveAndUp()
     state == "error";
     return;
   }
+
   uint32_t timeDiffAB = calculateTimeDiff(timeEnd, timeStart);
   uint32_t timeDiffNow = calculateTimeDiff(timeNow, timeStart);
   if (timeDiffAB == 0)
@@ -776,18 +804,40 @@ void showClockWhenLoopModeActiveAndUp()
     }
     return;
   }
+
   uint32_t timeNewStartSeconds = timeStart.TotalSeconds() + timeDiffAB * loopCount;
   uint32_t timeNewEndSeconds = timeEnd.TotalSeconds() + timeDiffAB * (loopCount + 1);
-
   uint32_t timeDiff1 = labs(timeNow.TotalSeconds() - timeNewStartSeconds);
+  uint32_t timeDiffNew = timeNewEndSeconds - timeNewStartSeconds;
+
+  printDateTime(timeNow);
+  printDateTime(RtcDateTime(timeDiff1));
+  Serial.println(timeNow.TotalSeconds());
+  Serial.println(timeNewEndSeconds);
+  if (timeNow.TotalSeconds() == timeNewEndSeconds)
+  {
+    // hien thi giay cuoi cung
+    if (loopLed1)
+    {
+      showTimeToClock(timeDiffNew, 2);
+      ShowLoopCount(loopCount, 1);
+    }
+    else
+    {
+      showTimeToClock(timeDiffNew, 1);
+      ShowLoopCount(loopCount, 2);
+    }
+    return;
+  }
+
   if (loopLed1)
   {
-    showTimeToClock(timeDiff1, 2);
+    showTimeToClock(timeDiff1 + 1, 2);
     ShowLoopCount(loopCount, 1);
   }
   else
   {
-    showTimeToClock(timeDiff1, 1);
+    showTimeToClock(timeDiff1 + 1, 1);
     ShowLoopCount(loopCount, 2);
   }
 }
@@ -857,6 +907,22 @@ void showClockWhenLoopModeActiveAndDown()
   uint32_t timeNewEndSeconds = timeEnd.TotalSeconds() + timeDiffAB * (loopCount);
 
   uint32_t timeDiff1 = labs(timeNewEndSeconds - timeNow.TotalSeconds());
+
+  if (timeNow.TotalSeconds() == (timeNewEndSeconds+1))
+  {
+    showMessage("Vao day khong?");
+    if (loopLed1)
+    {
+      showTimeToClock(0, 2);
+      ShowLoopCount(loopCount, 1);
+    }
+    else
+    {
+      showTimeToClock(0, 1);
+      ShowLoopCount(loopCount, 2);
+    }
+    return;
+  }
   if (loopLed1)
   {
     showTimeToClock(timeDiff1, 2);
