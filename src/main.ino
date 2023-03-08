@@ -1,24 +1,21 @@
 #include <Arduino.h>
-#include <ThreeWire.h>
-#include <RtcDS1302.h>
+#include <Wire.h>
+#include <RtcDS1307.h>
 #include <FastLED.h>
 #include <WebSocketsServer.h>
 #include <ESPAsyncWebServer.h>
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
 #include <FS.h>
+#include <otadrive_esp.h>
 
 // KHOI TAO THONG SO THU VIEN
-// CONNECTIONS:
-// DS1302 CLK/SCLK --> 25
-// DS1302 DAT/IO --> 26
-// DS1302 RST/CE --> 27
-// DS1302 VCC --> 3.3v - 5v
-// DS1302 GND --> GND
-ThreeWire myWire(26, 25, 27); // IO - DAT , SCLK - CLK , CE - RST
-RtcDS1302<ThreeWire> Rtc(myWire);
+// DS1307 SDA - SDA
+// DS1307 SCL - SCL
+RtcDS1307<TwoWire> Rtc(Wire);
 AsyncWebServer server(80);
 WebSocketsServer webSocket = WebSocketsServer(81);
+const int interruptPin = 19;
 
 // Khoi tao bien toan cuc
 const char *ssid = "MyESP32AP";
@@ -32,12 +29,18 @@ String state = "countToStart";
 boolean loopLed1;
 String startTime = "";
 String endTime = "";
-
+boolean isSeconds = false;
 RtcDateTime timeStart;
 RtcDateTime timeEnd;
 RtcDateTime timeNow;
 RtcDateTime timePause;
 
+// 1.1.3 - Cap nhat tinh nang check ban cap nhat qua Internet
+String version = "v@1.1.5";
+int ver_1 = 1;
+int ver_2 = 1;
+int ver_3 = 5;
+boolean doUpdate = false;
 // khao bao thong so led
 
 const int LED_PIN = 4;
@@ -65,6 +68,49 @@ byte digits[11] = {
     0b0000000  // tat led
 };
 // end khai bao thong so led
+void IRAM_ATTR onInterrupt()
+{
+  isSeconds = true;
+}
+bool wasError(const char *errorTopic = "")
+{
+  uint8_t error = Rtc.LastError();
+  if (error != 0)
+  {
+    // we have a communications error
+    // see https://www.arduino.cc/reference/en/language/functions/communication/wire/endtransmission/
+    // for what the number means
+    Serial.print("[");
+    Serial.print(errorTopic);
+    Serial.print("] WIRE communications error (");
+    Serial.print(error);
+    Serial.print(") : ");
+
+    switch (error)
+    {
+    case Rtc_Wire_Error_None:
+      Serial.println("(none?!)");
+      break;
+    case Rtc_Wire_Error_TxBufferOverflow:
+      Serial.println("transmit buffer overflow");
+      break;
+    case Rtc_Wire_Error_NoAddressableDevice:
+      Serial.println("no device responded");
+      break;
+    case Rtc_Wire_Error_UnsupportedRequest:
+      Serial.println("device doesn't support request");
+      break;
+    case Rtc_Wire_Error_Unspecific:
+      Serial.println("unspecified error");
+      break;
+    case Rtc_Wire_Error_CommunicationTimeout:
+      Serial.println("communications timed out");
+      break;
+    }
+    return true;
+  }
+  return false;
+}
 
 // Hàm ghi dữ liệu vào SPIFFS
 void saveSettingWifi()
@@ -106,7 +152,7 @@ void loadSettingWifi()
     password = json["password"];
     Serial.println(ssid);
     Serial.println(password);
-    WiFi.softAP(ssid, password,11,0);
+    WiFi.softAP(ssid, password, 11, 0);
     Serial.printf("Access point started: %s\n", ssid);
   }
   file.close();
@@ -293,6 +339,11 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
       RtcDateTime timeSync = convertUtcToRtcDateTime(doc["timeNow"].as<String>());
       webSocket.sendTXT(num, "Đồng bộ thời gian thành công!");
     }
+    else if (doc["action"] == "checkUpdate")
+    {
+      doUpdate = true;
+      webSocket.sendTXT(num, "Đang kiểm tra cập nhật. Nếu có bản cập nhật mới sẽ tự động restart!");
+    }
   }
 }
 RtcDateTime convertUtcToRtcDateTime(String utcDateTimeStr)
@@ -304,11 +355,9 @@ RtcDateTime convertUtcToRtcDateTime(String utcDateTimeStr)
   int minute = utcDateTimeStr.substring(14, 16).toInt();
   int second = utcDateTimeStr.substring(17, 19).toInt();
 
-  Rtc.SetIsWriteProtected(false);
   RtcDateTime timeConvertUtm = RtcDateTime(year, month, day, hour, minute, second);
   // Chuyen time qua mui gio +7
   Rtc.SetDateTime(RtcDateTime(timeConvertUtm.TotalSeconds() + 7 * 3600));
-  Rtc.SetIsWriteProtected(true);
 
   return RtcDateTime(year, month, day, hour, minute, second);
 }
@@ -316,33 +365,62 @@ RtcDateTime convertUtcToRtcDateTime(String utcDateTimeStr)
 void initRtc()
 {
   Rtc.Begin();
-  RtcDateTime compiled = RtcDateTime(__DATE__, __TIME__);
+#if defined(WIRE_HAS_TIMEOUT)
+  Wire.setWireTimeout(3000 /* us */, true /* reset_on_timeout */);
+#endif
 
-  showMessage("Compiled");
+  RtcDateTime compiled = RtcDateTime(__DATE__, __TIME__);
   printDateTime(compiled);
-  showMessage("EndCompiled");
+  Serial.println();
+
   if (!Rtc.IsDateTimeValid())
   {
-    showMessage("RTC lost confidence in the DateTime!");
-    Rtc.SetDateTime(compiled);
-  }
+    if (!wasError("setup IsDateTimeValid"))
+    {
+      // Common Causes:
+      //    1) first time you ran and the device wasn't running yet
+      //    2) the battery on the device is low or even missing
 
-  if (Rtc.GetIsWriteProtected())
-  {
-    showMessage("RTC was write protected, enabling writing now");
-    Rtc.SetIsWriteProtected(false);
+      Serial.println("RTC lost confidence in the DateTime!");
+      // following line sets the RTC to the date & time this sketch was compiled
+      // it will also reset the valid flag internally unless the Rtc device is
+      // having an issue
+
+      Rtc.SetDateTime(compiled);
+    }
   }
 
   if (!Rtc.GetIsRunning())
   {
-    showMessage("RTC was not actively running, starting now");
-    Rtc.SetIsRunning(true);
+    if (!wasError("setup GetIsRunning"))
+    {
+      Serial.println("RTC was not actively running, starting now");
+      Rtc.SetIsRunning(true);
+    }
   }
-  // RtcDateTime timeCheck = Rtc.GetDateTime();
-  // if (timeCheck <= compiled)
-  // {
-  //   Rtc.SetDateTime(compiled);
-  // }
+
+  RtcDateTime now = Rtc.GetDateTime();
+  if (!wasError("setup GetDateTime"))
+  {
+    if (now < compiled)
+    {
+      Serial.println("RTC is older than compile time, updating DateTime");
+      Rtc.SetDateTime(compiled);
+    }
+    else if (now > compiled)
+    {
+      Serial.println("RTC is newer than compile time, this is expected");
+    }
+    else if (now == compiled)
+    {
+      Serial.println("RTC is the same as compile time, while not expected all is still fine");
+    }
+  }
+
+  // never assume the Rtc was last configured by you, so
+  // just clear them to your needed state
+  Rtc.SetSquareWavePin(DS1307SquareWaveOut_1Hz);
+  wasError("setup SetSquareWavePin");
 }
 // khoi tao FastLed
 void initFastLed()
@@ -350,12 +428,16 @@ void initFastLed()
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(matLed1, NUM_LEDS);  // Khoi tao control cho mat 1
   FastLED.addLeds<WS2812B, LED_PIN2, GRB>(matLed2, NUM_LEDS); // khoi tao control cho mat 2
   FastLED.clear();
+  showErrorOnClock(ver_1, ver_2, ver_3); // Hien thong tin phien ban
+  delay(1000);
+  FastLED.clear();
 }
 void setup()
 {
   Serial.begin(9600);
   initFastLed();
   initRtc();
+  pinMode(interruptPin, INPUT_PULLUP);
   if (!SPIFFS.begin(true))
   {
     Serial.println("An error occurred while mounting SPIFFS");
@@ -376,7 +458,11 @@ void setup()
   server.begin();
   webSocket.begin();
   webSocket.onEvent(handleWebSocketEvent);
+
   initConnectWifiTest();
+  delay(2000);
+  attachInterrupt(digitalPinToInterrupt(interruptPin), onInterrupt, FALLING);
+  OTADRIVE.setInfo("ababad1e-b3a7-4a4e-a885-90c76ecd460c", version); // QUan ly phien ban
 }
 // Ham nay duoc dung de debug test WIFI
 // khoi tao AP tren mobile voi thong so ben duoi
@@ -385,7 +471,7 @@ void initConnectWifiTest()
 {
 
   // Connect to the new Wi-Fi network
-  WiFi.begin("Quang Cao Nguyen Ho.Com", "908165185");
+  WiFi.begin("UPDATECLOCK", "123456789");
   WiFi.hostname("Dong Van Ho");
   Serial.printf("Connecting to %s...\n", ssid);
 
@@ -409,20 +495,50 @@ void initConnectWifiTest()
   Serial.println("Connected to new network");
   Serial.println(WiFi.localIP());
 }
+void ota()
+{
+  if (OTADRIVE.timeTick(30))
+  {
+    OTADRIVE.syncResources();
+    OTADRIVE.updateFirmware();
+    doUpdate = false;
+  }
+}
 
 void loop()
 {
   webSocket.loop();
-  timeNow = Rtc.GetDateTime();
-  showMessage("timeStart");
-  printDateTime(timeStart);
-  showMessage("timeNow");
-  printDateTime(timeNow);
-  showMessage("timeEnd");
-  printDateTime(timeEnd);
-  xuLyLogicDongHo();
+  if (isSeconds)
+  {
+    timeNow = Rtc.GetDateTime();
+    printDateTime(timeNow);
+    xuLyLogicDongHo();
+    isSeconds = false;
+  }
+  if (doUpdate)
+    ota();
+
+  // timeNow = Rtc.GetDateTime();
+  // timeNow = Rtc.GetDateTime();
+  // showMessage("timeStart");
+  // printDateTime(timeStart);
+  // showMessage("timeNow");
+  // printDateTime(timeNow);
+  // showMessage("timeEnd");
+  // printDateTime(timeEnd);
+  // xuLyLogicDongHo();
 }
 // xu Ly Logic Dong ho
+void showErrorOnClock(int code1, int code2, int code3)
+{
+  ShowDigit(code1, 2, 0, 1);
+  ShowDigit(code2, 4, 12, 1);
+  ShowDigit(code3, 6, 24, 1);
+
+  ShowDigit(code1, 2, 0, 2);
+  ShowDigit(code2, 4, 12, 2);
+  ShowDigit(code3, 6, 24, 2);
+}
 void xuLyLogicDongHo()
 {
   if (timeStart >= timeEnd && modeRaceUp && !isNotStop)
@@ -435,8 +551,7 @@ void xuLyLogicDongHo()
   }
   if (state == "error")
   {
-    showTimeToClock(2160001, 1);
-    showTimeToClock(2160001, 2);
+    showErrorOnClock(0,0,1); // Chuong trinh dong ho co loi
     showMessage("Chương Trình Bị lỗi!");
     return;
   }
@@ -484,13 +599,13 @@ void xuLyLogicDongHo()
   // Neu co hen gio va state dang o trang thai dem toi hen gio thi hien thi thoi gian dem nguoc toi luc bat dau
   if (isTimer && state == "countToStart")
   {
-    if (timeNow < timeStart)
+    if (timeNow <= timeStart)
     {
       showMessage("isTimer && state == countToStart && timeNow < timeStart");
       uint32_t timeDiff = calculateTimeDiff(timeStart, timeNow);
       uint8_t currentSecond = timeNow.Second();
       showMessage("Dem Toi Start : ");
-      Serial.println(timeDiff);
+      // Serial.println(timeDiff);
       showTimeToClock(timeDiff, 1);
       showTimeToClock(timeDiff, 2);
       // Retun ngay khuc nay de khong kiem tra nhung buoc duoi tranh lam giam hieu nang
