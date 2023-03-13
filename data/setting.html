@@ -91,13 +91,10 @@
                 </div>
                 <button type="button" id="submit" disabled style="background-color: gray;">Lưu Wifi Mới</button>
                 <br />
-                <button type="button" id="stop" style="background-color:gray;" disabled>KẾT THÚC GIẢI</button>
                 <button type="button" id="setClockMode" style="background-color:gray;" disabled>HIỂN THỊ THỜI GIAN
                     THỰC</button>
                 <button type="button" id="syncClock" style="background-color:gray;" disabled>ĐỒNG BỘ THỜI GIAN VỚI ĐIỆN
                     THOẠI</button>
-                <button type="button" id="checkUpdate" style="background-color:gray;" disabled>KIỂM TRA CẬP
-                    NHẬT</button>
                 <br />
                 <br />
                 <label>*Lưu WIFI không ảnh hưởng tới giải đang chạy</label>
@@ -113,11 +110,9 @@
 
         //Javascript để xử lý sự kiện và gửi form sử dụng Ajax
         const buttonSetting = document.getElementById("buttonSetting");
-        const btnStop = document.getElementById("stop");
         const btnSetClockMode = document.getElementById("setClockMode");
         const btnSyncClock = document.getElementById("syncClock");
         const btnSubmit = document.getElementById("submit");
-        const checkUpdate = document.getElementById("checkUpdate");
         // const socket = new WebSocket('ws://' + location.hostname + ':81');
         // Socket Variable declaration
         var mySocket;
@@ -126,18 +121,11 @@
             btnSubmit.style.background = "green";
             btnSubmit.disabled = false;
 
-            btnStop.style.background = "red";
-            btnStop.disabled = false;
-
             btnSetClockMode.style.background = "red";
             btnSetClockMode.disabled = false;
 
             btnSyncClock.style.background = "red";
             btnSyncClock.disabled = false;
-
-            checkUpdate.style.background = "red";
-            checkUpdate.disabled = false;
-
         };
 
         // Open
@@ -147,17 +135,12 @@
             btnSubmit.style.background = "green";
             btnSubmit.disabled = false;
 
-            btnStop.style.background = "red";
-            btnStop.disabled = false;
-
             btnSetClockMode.style.background = "red";
             btnSetClockMode.disabled = false;
 
             btnSyncClock.style.background = "red";
             btnSyncClock.disabled = false;
 
-            checkUpdate.style.background = "red";
-            checkUpdate.disabled = false;
         };
 
         // Closed
@@ -167,8 +150,8 @@
                 document.getElementById('status').style.color = 'red';
                 console.log('Mất kết nối với đồng hồ...')
             }
-            // mySocket = new WebSocket('ws://' + location.hostname + ':81');
-            mySocket = new WebSocket('ws://192.168.2.5:81');
+            mySocket = new WebSocket('ws://' + location.hostname + ':81');
+            // mySocket = new WebSocket('ws://192.168.2.5:81');
             mySocket.addEventListener('open', socketOpenListener);
             mySocket.addEventListener('message', socketMessageListener);
             mySocket.addEventListener('close', socketCloseListener);
@@ -176,17 +159,11 @@
             btnSubmit.style.background = "gray";
             btnSubmit.disabled = true;
 
-            btnStop.style.background = "gray";
-            btnStop.disabled = true;
-
             btnSetClockMode.style.background = "gray";
             btnSetClockMode.disabled = true;
 
             btnSyncClock.style.background = "gray";
             btnSyncClock.disabled = true;
-
-            checkUpdate.style.background = "gray";
-                checkUpdate.disabled = true;
 
         };
         socketCloseListener();
@@ -201,17 +178,11 @@
                 btnSubmit.style.background = "gray";
                 btnSubmit.disabled = true;
 
-                btnStop.style.background = "gray";
-                btnStop.disabled = true;
-
                 btnSetClockMode.style.background = "gray";
                 btnSetClockMode.disabled = true;
 
                 btnSyncClock.style.background = "gray";
                 btnSyncClock.disabled = true;
-
-                checkUpdate.style.background = "gray";
-                checkUpdate.disabled = true;
 
                 event.preventDefault();
                 const ssid = document.getElementById("ssid").value;
@@ -228,48 +199,17 @@
                 mySocket.send(data);
             }
         });
-        btnStop.addEventListener('click', function (event) {
-            if (confirm("Bạn có chắn chắn muốn đồng hồ dừng lại tại thời điểm này?")) {
-                btnSubmit.style.background = "gray";
-                btnSubmit.disabled = true;
 
-                btnStop.style.background = "gray";
-                btnStop.disabled = true;
-
-                btnSetClockMode.style.background = "gray";
-                btnSetClockMode.disabled = true;
-
-                btnSyncClock.style.background = "gray";
-                btnSyncClock.disabled = true;
-
-                checkUpdate.style.background = "gray";
-                checkUpdate.disabled = true;
-
-                let action = "stop";
-                // String state = "countToStart";
-                const data = JSON.stringify({
-                    action: action,
-                });
-                console.log(data);
-                mySocket.send(data);
-            }
-        })
         btnSetClockMode.addEventListener('click', function (event) {
             if (confirm("Bạn có chắn chắn muốn chuyển chế độ qua mode Clock?")) {
                 btnSubmit.style.background = "gray";
                 btnSubmit.disabled = true;
 
-                btnStop.style.background = "gray";
-                btnStop.disabled = true;
-
                 btnSetClockMode.style.background = "gray";
                 btnSetClockMode.disabled = true;
 
                 btnSyncClock.style.background = "gray";
                 btnSyncClock.disabled = true;
-
-                checkUpdate.style.background = "gray";
-                checkUpdate.disabled = true;
 
                 let action = "setClock";
                 // String state = "countToStart";
@@ -286,17 +226,11 @@
                 btnSubmit.style.background = "gray";
                 btnSubmit.disabled = true;
 
-                btnStop.style.background = "gray";
-                btnStop.disabled = true;
-
                 btnSetClockMode.style.background = "gray";
                 btnSetClockMode.disabled = true;
 
                 btnSyncClock.style.background = "gray";
                 btnSyncClock.disabled = true;
-
-                checkUpdate.style.background = "gray";
-                checkUpdate.disabled = true;
 
                 let action = "syncClock";
                 // String state = "countToStart";
@@ -313,32 +247,7 @@
                 mySocket.send(data);
             }
         })
-        checkUpdate.addEventListener('click', function (event) {
-            if (confirm("Bạn cần khỏi tạo Điểm Truy Cập Cá Nhân trước khi thực hiện điều này! ID: UPDATECLOCK PASS : 12345678")) {
-                btnSubmit.style.background = "gray";
-                btnSubmit.disabled = true;
 
-                btnStop.style.background = "gray";
-                btnStop.disabled = true;
-
-                btnSetClockMode.style.background = "gray";
-                btnSetClockMode.disabled = true;
-
-                btnSyncClock.style.background = "gray";
-                btnSyncClock.disabled = true;
-                
-                checkUpdate.style.background = "gray";
-                checkUpdate.disabled = true;
-
-                let action = "checkUpdate";
-
-                const data = JSON.stringify({
-                    action: action,
-                });
-                console.log(data);
-                mySocket.send(data);
-            }
-        })
     </script>
 </body>
 

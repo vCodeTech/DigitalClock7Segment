@@ -7,7 +7,7 @@
 #include <ArduinoJson.h>
 #include <SPIFFS.h>
 #include <FS.h>
-#include <otadrive_esp.h>
+#include <AsyncElegantOTA.h>
 
 // KHOI TAO THONG SO THU VIEN
 // DS1307 SDA - SDA
@@ -18,8 +18,8 @@ WebSocketsServer webSocket = WebSocketsServer(81);
 const int interruptPin = 19;
 
 // Khoi tao bien toan cuc
-const char *ssid = "MyESP32AP";
-const char *password = "123456789";
+const char *ssid = "TRUERACE.ORG";
+const char *password = "aA123456";
 boolean isDebug = true;
 boolean isTimer;
 boolean modeRaceUp;
@@ -36,10 +36,10 @@ RtcDateTime timeNow;
 RtcDateTime timePause;
 
 // 1.1.3 - Cap nhat tinh nang check ban cap nhat qua Internet
-String version = "v@1.1.9";
+String version = "v@1.1.0";
 int ver_1 = 1;
 int ver_2 = 1;
-int ver_3 = 9;
+int ver_3 = 0;
 boolean doUpdate = false;
 // khao bao thong so led
 
@@ -51,6 +51,7 @@ const int NUM_LED_SEGMENT = 14; // Khai bao so luong led co tren 1 segment
 const int NUM_LED_DOT = 12;     // Khai bao so luon gled co tren 1 dot , phan chia gio phut giay
 CRGB matLed1[NUM_LEDS];
 CRGB matLed2[NUM_LEDS];
+
 
 // Tạo mảng các điểm ảnh để biểu diễn đoạn số led 7 doan
 // 0bgfedcba
@@ -344,9 +345,6 @@ void handleWebSocketEvent(uint8_t num, WStype_t type, uint8_t *payload, size_t l
     {
       if (!doUpdate)
       {
-        if (WiFi.status() != WL_CONNECTED)
-          initConnectWifiTest();
-
         doUpdate = true;
         webSocket.sendTXT(num, "Đang kiểm tra cập nhật. Nếu có bản cập nhật mới sẽ tự động restart!");
       }
@@ -469,6 +467,7 @@ void setup()
             { request->send(SPIFFS, "/jquery-1.11.0.min.js", "text/javascript"); });
   server.on("/flatpickr.min.css", HTTP_GET, [](AsyncWebServerRequest *request)
             { request->send(SPIFFS, "/flatpickr.min.css", "text/css"); });
+  AsyncElegantOTA.begin(&server);          
   server.begin();
   webSocket.begin();
   webSocket.onEvent(handleWebSocketEvent);
@@ -476,7 +475,6 @@ void setup()
   initConnectWifiTest();
   delay(2000);
   attachInterrupt(digitalPinToInterrupt(interruptPin), onInterrupt, FALLING);
-  OTADRIVE.setInfo("ababad1e-b3a7-4a4e-a885-90c76ecd460c", version); // QUan ly phien ban
 }
 // Ham nay duoc dung de debug test WIFI
 // khoi tao AP tren mobile voi thong so ben duoi
@@ -511,19 +509,11 @@ void initConnectWifiTest()
   Serial.println(WiFi.localIP());
   showErrorOnClock(0, 0, 3); // WIFI CONNECT THANH CONG
 }
-void ota()
-{
-  if (OTADRIVE.timeTick(30))
-  {
-    OTADRIVE.syncResources();
-    OTADRIVE.updateFirmware();
-    doUpdate = false;
-  }
-}
 
 void loop()
 {
   webSocket.loop();
+  AsyncElegantOTA.loop();
   if (isSeconds)
   {
     timeNow = Rtc.GetDateTime();
@@ -531,8 +521,6 @@ void loop()
     xuLyLogicDongHo();
     isSeconds = false;
   }
-  if (doUpdate)
-    ota();
 
   // timeNow = Rtc.GetDateTime();
   // timeNow = Rtc.GetDateTime();
@@ -908,7 +896,7 @@ void showClockWhenLoopModeActiveAndDown()
 
   uint32_t timeDiff1 = labs(timeNewEndSeconds - timeNow.TotalSeconds());
 
-  if (timeNow.TotalSeconds() == (timeNewEndSeconds+1))
+  if (timeNow.TotalSeconds() == (timeNewEndSeconds + 1))
   {
     showMessage("Vao day khong?");
     if (loopLed1)
